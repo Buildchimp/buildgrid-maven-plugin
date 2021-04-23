@@ -1,9 +1,7 @@
-package org.commonjava.build.grid;
+package org.commonjava.build.grid.plugins;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactoryBuilder;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.execution.ProjectDependencyGraph;
@@ -12,12 +10,16 @@ import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
-import org.yaml.snakeyaml.Yaml;
+import org.commonjava.build.grid.format.BuildOrder;
+import org.commonjava.build.grid.format.ProjectDependencies;
+import org.commonjava.build.grid.format.ProjectRef;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Mojo( name="buildorder", aggregator = true, defaultPhase = LifecyclePhase.INITIALIZE, requiresProject = true )
@@ -36,12 +38,28 @@ public class BuildOrderMojo implements org.apache.maven.plugin.Mojo
         ProjectDependencyGraph graph = session.getProjectDependencyGraph();
         List<MavenProject> sortedProjects = graph.getSortedProjects();
 
-        List<ProjectUpstreams> projectUpstreams = sortedProjects.stream()
-                                                                .map( p -> new ProjectUpstreams(
-                                                                                Path.of( session.getExecutionRootDirectory() ),
-                                                                                p, graph.getUpstreamProjects( p,
-                                                                                                              false ) ) )
-                                                                .collect( Collectors.toList() );
+        BiConsumer<MavenProject, ProjectDependencies> toProjectRef = ( dp, pd ) -> pd.addDependencyRef(
+                        new ProjectRef( Path.of( session.getExecutionRootDirectory() ), dp.getFile(), dp.getGroupId(),
+                                        dp.getArtifactId() ) );
+
+        Function<MavenProject, ProjectDependencies> mapper = p -> {
+            ProjectDependencies pd =
+                            new ProjectDependencies( Path.of( session.getExecutionRootDirectory() ), p.getFile(),
+                                                     p.getGroupId(), p.getArtifactId() );
+
+            graph.getUpstreamProjects( p, false ).forEach( dp -> toProjectRef.accept( dp, pd ) );
+
+            if ( sortedProjects.contains( p.getParent() ) )
+            {
+                MavenProject parent = p.getParent();
+                toProjectRef.accept( parent, pd );
+            }
+
+            return pd;
+        };
+
+        List<ProjectDependencies> projectDependencies =
+                        sortedProjects.stream().map( mapper ).collect( Collectors.toList() );
 
         try
         {
@@ -54,7 +72,7 @@ public class BuildOrderMojo implements org.apache.maven.plugin.Mojo
                 output.getParentFile().mkdirs();
             }
 
-            om.writeValue( output, new BuildOrder( projectUpstreams ) );
+            om.writeValue( output, new BuildOrder( projectDependencies ) );
             log.info( "Wrote build order to: " + output );
         }
         catch ( IOException e )

@@ -1,3 +1,3 @@
-File touchFile = new File( basedir, "target/touch.txt" );
+File touchFile = new File( basedir, ".grid/buildorder.yaml" );
 
 assert touchFile.isFile()
