@@ -9,7 +9,6 @@
 
   <name>buildgrid-maven-plugin Maven Plugin</name>
 
-  <!-- FIXME change it to the project's website -->
   <url>https://github.com/jdcasey/buildgrid-maven-plugin</url>
 
   <prerequisites>

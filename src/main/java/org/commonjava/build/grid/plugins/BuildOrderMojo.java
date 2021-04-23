@@ -11,8 +11,8 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.commonjava.build.grid.format.BuildOrder;
-import org.commonjava.build.grid.format.ProjectDependencies;
 import org.commonjava.build.grid.format.ProjectRef;
+import org.commonjava.build.grid.format.DependencyRef;
 
 import java.io.File;
 import java.io.IOException;
@@ -38,16 +38,16 @@ public class BuildOrderMojo implements org.apache.maven.plugin.Mojo
         ProjectDependencyGraph graph = session.getProjectDependencyGraph();
         List<MavenProject> sortedProjects = graph.getSortedProjects();
 
-        BiConsumer<MavenProject, ProjectDependencies> toProjectRef = ( dp, pd ) -> pd.addDependencyRef(
-                        new ProjectRef( Path.of( session.getExecutionRootDirectory() ), dp.getFile(), dp.getGroupId(),
-                                        dp.getArtifactId() ) );
+        BiConsumer<MavenProject, ProjectRef> toProjectRef = ( dependencyProject, projectRef ) -> projectRef.addDependencyRef(
+                        new DependencyRef( Path.of( session.getExecutionRootDirectory() ), dependencyProject.getFile(), dependencyProject.getGroupId(),
+                                           dependencyProject.getArtifactId() ) );
 
-        Function<MavenProject, ProjectDependencies> mapper = p -> {
-            ProjectDependencies pd =
-                            new ProjectDependencies( Path.of( session.getExecutionRootDirectory() ), p.getFile(),
-                                                     p.getGroupId(), p.getArtifactId() );
+        Function<MavenProject, ProjectRef> mapper = p -> {
+            ProjectRef pd =
+                            new ProjectRef( Path.of( session.getExecutionRootDirectory() ), p.getFile(),
+                                            p.getGroupId(), p.getArtifactId() );
 
-            graph.getUpstreamProjects( p, false ).forEach( dp -> toProjectRef.accept( dp, pd ) );
+            graph.getUpstreamProjects( p, false ).forEach( dependencyProject -> toProjectRef.accept( dependencyProject, pd ) );
 
             if ( sortedProjects.contains( p.getParent() ) )
             {
@@ -58,7 +58,7 @@ public class BuildOrderMojo implements org.apache.maven.plugin.Mojo
             return pd;
         };
 
-        List<ProjectDependencies> projectDependencies =
+        List<ProjectRef> projectDependencies =
                         sortedProjects.stream().map( mapper ).collect( Collectors.toList() );
 
         try
